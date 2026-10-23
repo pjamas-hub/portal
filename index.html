@@ -1273,12 +1273,12 @@ erDiagram
   function renderInv(){
   document.getElementById('i-tot').textContent=fmt(it);
   document.getElementById('i-liq').textContent=fmt(il);
-  document.getElementById('i-liqd').textContent=pct(il/it)+' do total, liquidez diária';
+  document.getElementById('i-liqd').textContent=it?pct(il/it)+' do total, liquidez diária':'liquidez diária';
   document.getElementById('i-rend').textContent=fmt(ir);
-  document.getElementById('i-rendd').textContent=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(ir/it*100)+'% no mês, bruto';
+  document.getElementById('i-rendd').textContent=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2}).format(it?ir/it*100:0)+'% no mês, bruto';
   const nx=INV.filter(x=>x.vm).sort((a,b)=>(a.vm[0]*12+a.vm[1])-(b.vm[0]*12+b.vm[1]))[0];
-  document.getElementById('i-prox').textContent=fmt(nx.vf);
-  document.getElementById('i-proxd').textContent=nx.p+' · '+nx.em+' · '+nx.venc;
+  document.getElementById('i-prox').textContent=nx?fmt(nx.vf||nx.v):'–';
+  document.getElementById('i-proxd').textContent=nx?nx.p+' · '+nx.em+' · '+nx.venc:'nenhuma aplicação com vencimento';
   let ih='<thead><tr><th>Aplicação</th><th>Emissor</th><th>Taxa</th><th>Aplicado em</th><th>Vencimento</th><th>Liquidez</th><th class="r">Valor em 30/set</th><th class="r">Rendeu no mês</th><th>Fonte</th></tr></thead><tbody>';
   INV.forEach(x=>ih+=`<tr${x.novo?' class="newrow"':''}><td><b style="font-weight:600">${esc(x.p)}</b><span class="orig">${esc(x.inst)}</span></td><td>${esc(x.em)}</td><td>${esc(x.tx)}</td><td>${x.ap}</td><td>${x.venc}</td><td>${x.d?'<span class="nat renda">'+esc(x.liq)+'</span>':esc(x.liq)}</td><td class="r">${fmt(x.v)}</td><td class="r pos">+${fmt(x.r).slice(3)}</td><td><span class="src" style="font-size:12px">${esc(x.src)}</span></td></tr>`);
   ih+=`<tr class="total"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="r">${fmt(it)}</td><td class="r">+${fmt(ir).slice(3)}</td><td></td></tr></tbody>`;
@@ -1287,7 +1287,7 @@ erDiagram
   const MS=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   const months=[];for(let k=0;k<12;k++){const mm=9+k, y=2026+Math.floor(mm/12), m=mm%12+1;months.push({y,m,l:MS[m-1]+'/'+String(y).slice(2),v:0,its:[]});}
   INV.forEach(x=>{if(!x.vm)return;const o=months.find(q=>q.y===x.vm[0]&&q.m===x.vm[1]);if(o){o.v+=x.vf;o.its.push(x);}});
-  const W=1060,H=220,Lx=56,R=10,T=12,B=28, mv=Math.max(...months.map(q=>q.v)), top=Math.ceil(mv/4000)*4000;
+  const W=1060,H=220,Lx=56,R=10,T=12,B=28, mv=Math.max(...months.map(q=>q.v)), top=Math.max(4000,Math.ceil(mv/4000)*4000);
   const y=v=>T+(H-T-B)*(1-v/top), cw=(W-Lx-R)/12, bw=Math.min(30,cw*.45);
   let g='';for(let k=0;k<=4;k++){const v=top*k/4;g+=`<line class="grid" x1="${Lx}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${Lx-8}" y="${y(v)+4}" text-anchor="end">${v/1000} mil</text>`;}
   months.forEach((q,k)=>{const cx=Lx+cw*k+cw/2;
@@ -1298,13 +1298,16 @@ erDiagram
     itip.hidden=false;itip.innerHTML=`<b>${q.l}</b><br>`+(q.its.length?q.its.map(x=>`${esc(x.p)} ${esc(x.em)}: ${fmt(x.vf)}`).join('<br>'):'Nada vence');
     itip.style.left=(e.clientX-pb.left)+'px';itip.style.top=(e.clientY-pb.top-12)+'px';});r.addEventListener('mouseleave',()=>itip.hidden=true);});
 }
+  function safeAlloc(){try{allocAll();}catch(e){}}// com a carteira vazia a composição não tem o que mostrar
   renderInv();
-  window.__invAdd=x=>{INV.push(x);tots();allocAll();renderInv();};
+  window.__invAdd=x=>{INV.push(x);tots();safeAlloc();renderInv();};
   window.__inv=INV;
+  // modo zerado do app: tira as aplicações de exemplo e mantém as cadastradas à mão
+  window.__invZero=()=>{for(let i=INV.length-1;i>=0;i--)if(!INV[i].novo)INV.splice(i,1);tots();safeAlloc();renderInv();};
   (window.__persist=window.__persist||{}).lanc={get:()=>({L:all().map(y=>({cat:y.cat,quem:y.quem,byRule:!!y.byRule,owner:!!y.owner,ruleN:y.ruleN||0,prev:y.prev})),G:GASTO,B:BUCKET,INV:INV.filter(x=>x.novo)}),
     set:o=>{if(o.G){for(const k in o.G)GASTO[k]=o.G[k];}if(o.B)Object.assign(BUCKET,o.B);
       const a=all();(o.L||[]).forEach((v,i)=>{if(a[i])Object.assign(a[i],v);});nRec=a.filter(y=>!y.kids&&y.cat!==y.cat0).length;
-      (o.INV||[]).forEach(x=>{INV.push(x);});tots();allocAll();renderInv();renderCC();}};
+      (o.INV||[]).forEach(x=>{INV.push(x);});tots();safeAlloc();renderInv();renderCC();}};
 })();
 </script>
 <script>
@@ -1666,7 +1669,7 @@ erDiagram
     const bal=[];let b=anTem;exp.forEach(v=>{b+=need-v;bal.push(b);});return {exp,T,need,bal};}
   function renderAn(){
     const {exp,T,need,bal}=anPlan(),flat=Math.max(0,(T-anTem)/12);
-    $('pansum').innerHTML=`Os gastos anuais somam <b>${brl(T)}</b> nos próximos 12 meses. A reserva já tem ${brl(anTem)}. Dividindo por 12 dariam ${brl(flat)} por mês, mas dezembro, janeiro e fevereiro concentram ${brl(exp[2]+exp[3]+exp[4])}: para chegar a cada um com o dinheiro separado, é preciso guardar <b>${brl(need)} por mês</b> a partir de outubro.`;
+    $('pansum').innerHTML=!AN.length?'Nenhum gasto anual cadastrado ainda. Inclua IPVA, IPTU, seguros, matrículas e outros que acontecem uma vez por ano, ou aceite as sugestões que o app encontrar no seu histórico.':`Os gastos anuais somam <b>${brl(T)}</b> nos próximos 12 meses. A reserva já tem ${brl(anTem)}. Dividindo por 12 dariam ${brl(flat)} por mês, mas dezembro, janeiro e fevereiro concentram ${brl(exp[2]+exp[3]+exp[4])}: para chegar a cada um com o dinheiro separado, é preciso guardar <b>${brl(need)} por mês</b> a partir de outubro.`;
     const W=1060,H=240,L=56,R=10,T0=16,B=28,lo=Math.min(0,...bal),top=Math.ceil(Math.max(...exp,...bal)/2000)*2000,y=v=>T0+(H-T0-B)*(1-(v-lo)/(top-lo)),cw=(W-L-R)/12,bw=Math.min(34,cw*.45);
     let g='';for(let k=0;k<=4;k++){const v=lo+(top-lo)*k/4;g+=`<line stroke="var(--line)" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" style="fill:var(--muted);font:12px var(--sans)">${nf(Math.abs(v)<1?0:v/1000,0)} mil</text>`;}
     const pts=[];MF.forEach((m,i)=>{const cx=L+cw*i+cw/2;if(exp[i]){const y0=y(0),y1=y(exp[i]);g+=`<rect x="${cx-bw/2}" y="${y1}" width="${bw}" height="${y0-y1}" rx="4" fill="var(--series-2)"><title>${m}: ${AN.filter(a=>a.m===i).map(a=>a.n).join(', ')} · ${brl(exp[i])}</title></rect>`;}
@@ -1723,7 +1726,7 @@ erDiagram
       ${p.liq==='warn'?`<div class="okbox warn">O dinheiro está no Tesouro IPCA+ 2029, que vence depois da data do projeto. Vender antes é possível, mas a preço de mercado: se os juros subirem, pode valer menos que o aplicado.</div>`:p.liq==='ok'?`<div class="okbox good">O dinheiro fica disponível antes da data do projeto.</div>`:''}
       </div>`;});
     const pct=Math.round((DONE.real/DONE.est-1)*100);
-    h+=`<div class="card pcard"><div class="charthead"><h2>Concluído: ${DONE.n}</h2><span class="hint">${DONE.q}</span></div>
+    if(!window.__zero)h+=`<div class="card pcard"><div class="charthead"><h2>Concluído: ${DONE.n}</h2><span class="hint">${DONE.q}</span></div>
       <table class="mini" style="max-width:720px"><thead><tr><th>Item</th><th class="r">Previsto</th><th class="r">Gasto</th></tr></thead><tbody>${DONE.it.map(x=>`<tr><td>${x[0]}</td><td class="r">${nf(x[1])}</td><td class="r ${x[2]>x[1]?'neg':''}">${nf(x[2])}</td></tr>`).join('')}
       <tr class="total"><td>Total</td><td class="r">${nf(DONE.est)}</td><td class="r">${nf(DONE.real)}</td></tr></tbody></table>
       <p class="hint" style="margin:0">Os lançamentos marcados com o projeto saíram da reserva dele, por isso não estouraram o orçamento de agosto. Este projeto custou ${pct}% a mais que o previsto; é daí que vem a sugestão de ${P.folga}% de folga nos próximos.</p></div>`;
@@ -1859,6 +1862,7 @@ erDiagram
     render();agSync();});
   panel.addEventListener('change',e=>{const t=e.target,c=t.dataset.cfg;if(!c)return;CFG[c]=t.type==='checkbox'?t.checked:(+t.value||0);render();agSync();});
   (window.__persist=window.__persist||{}).avisos={get:()=>({CFG,DONE,SNOOZE}),set:o=>{if(o.CFG)Object.assign(CFG,o.CFG);if(o.DONE)DONE=o.DONE;if(o.SNOOZE)SNOOZE=o.SNOOZE;render();agSync();}};
+  window.__avZero=()=>{CONTAS.splice(0);SALDOS.splice(0);render();};
   render();
 })();
 </script>
@@ -1876,6 +1880,15 @@ erDiagram
 #cofreBar{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
 #cofreBar button{font:500 12px var(--sans);background:none;border:1px solid var(--line2);border-radius:99px;padding:3px 10px;color:var(--fg);cursor:pointer}
 @media print{body *{visibility:hidden}#gate .rk,#gate .rk *{visibility:visible}#gate .rk{position:fixed;top:40px;left:40px}}
+
+/* modo zerado: some tudo o que é exemplo; ficam as partes que você preenche */
+.zcard{display:flex;flex-direction:column;gap:8px;max-width:760px;padding:22px 24px}
+.zcard h2{margin:0}
+body.zero #t-modelo,body.zero #t-decisoes{display:none}
+body.zero #p-fluxo>:not(.zcard),body.zero #p-importar>:not(.zcard),body.zero #p-conta>:not(.zcard),body.zero #p-gastos>:not(.zcard){display:none!important}
+body.zero #p-invest nav.subtabs button:nth-child(2),body.zero #p-invest nav.subtabs button:nth-child(3),body.zero #p-invest nav.subtabs button:nth-child(4){display:none}
+body.zero #p-filhos .kpis,body.zero #p-filhos nav.subtabs button:not(:last-child){display:none!important}
+#exBanner{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 </style>
 <div id="gate"><div class="box" id="gbox"></div></div>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -2006,8 +2019,31 @@ erDiagram
     $('gGo').onclick=async()=>{const k=$('gK').value,a=$('gN1').value,b=$('gN2').value;if(a.length<10)return sRk('A nova senha precisa ter pelo menos 10 caracteres.');if(a!==b)return sRk('As duas senhas não são iguais.');
       view(`${head}<p class="hint">Abrindo…</p>`);let raw;try{raw=await openVault(k,'rk');}catch(e){return sRk('Chave de recuperação incorreta.');}
       try{await changePw(raw,a);await loadState();await sealState();await ST[mode].save();enter();}catch(e){sRk('Não foi possível salvar: '+e.message);}};}
+  // ---------- começar do zero ----------
+  let zero=false;
+  const ZC={
+    'p-fluxo':['Fluxo de caixa','O fluxo se monta com os extratos que você importar: saldo, entradas, saídas e aplicações de cada mês, mais o que está previsto.'],
+    'p-importar':['Importar extratos','A leitura dos seus extratos (Itaú, C6, Nubank) é a próxima etapa em construção. Quando estiver pronta, é aqui que você escolhe o arquivo baixado do banco.'],
+    'p-conta':['Conta corrente','Os lançamentos da conta e do cartão aparecem aqui depois da primeira importação.'],
+    'p-gastos':['Gastos','Gastos por categoria, composição e orçamento aparecem depois da primeira importação.']};
+  function applyZero(){zero=true;window.__zero=true;document.body.classList.add('zero');
+    for(const id in ZC){const S=$(id);if(!S||S.querySelector('.zcard'))continue;const c=document.createElement('div');c.className='card zcard';
+      c.innerHTML=`<h2>${ZC[id][0]}</h2><p class="hint" style="margin:0">${ZC[id][1]}</p><p class="hint" style="margin:0">Enquanto isso, já dá para preencher: <b>Planejamento</b> (gastos anuais e projetos), <b>Investimentos</b> (aplicações cadastradas à mão) e <b>Filhos › Configurar</b>.</p>`;S.prepend(c);}
+    try{window.__invZero();}catch(e){}try{window.__avZero();}catch(e){}try{window.__persist.plano.set({});}catch(e){}
+    const fc=[...document.querySelectorAll('#p-filhos nav.subtabs button')].pop();fc&&fc.click();
+    const tag=$('exBanner');tag&&tag.remove();}
+  function startZero(){if(!confirm('Apagar os dados de exemplo e começar com o Portal vazio?\n\nOs projetos, gastos anuais e filhos de exemplo também saem. Isso não tem volta.'))return;
+    const P=window.__persist;
+    try{P.plano.set({AN:[],SUG:[],PR:[],anTem:0});}catch(e){}
+    try{P.filhos.set({KIDS:[],EXTRA:[],RULES:[],R:{pensao:0}});}catch(e){}
+    try{P.avisos.set({DONE:{},SNOOZE:{}});}catch(e){}
+    applyZero();document.querySelector('[data-tab="fluxo"]').click();mark();}
+  (window.__persist=window.__persist||{}).app={get:()=>({zero}),set:o=>{if(o.zero)applyZero();}};
+  function banner(){if(zero||$('exBanner'))return;const b=document.createElement('div');b.id='exBanner';b.className='okbox warn';
+    b.innerHTML='<span>Você está vendo <b>dados de exemplo</b>, todos inventados.</span><button class="pill" id="zGo">Começar do zero</button>';
+    document.querySelector('.topbar').after(b);$('zGo').onclick=startZero;}
   // ---------- dentro do app ----------
-  function enter(){$('gate').hidden=true;wrap.hidden=false;lastSave=new Date();bar();watch();window.__agendaSync();}
+  function enter(){$('gate').hidden=true;wrap.hidden=false;lastSave=new Date();bar();watch();banner();window.__agendaSync();}
   function bar(msg){let el=$('cofreBar');if(!el){el=document.createElement('span');el.id='cofreBar';const tb=document.querySelector('.topbar');tb.querySelector('.tag').replaceWith(el);
       el.addEventListener('click',e=>{if(e.target.id==='cLock')lock();});}
     const t=lastSave?lastSave.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
