@@ -286,6 +286,17 @@ dialog.nc label.ck input{margin-top:3px}
 .pcard input[type=text]{width:220px}.pcard input.pname{font:600 17px var(--sans);width:min(360px,100%);border-color:transparent;padding:4px 6px;margin-left:-6px}
 .pcard input.pname:hover,.pcard input.pname:focus{border-color:var(--line2)}
 .pcard .cleg input[type=month]{width:170px}
+#bell{font:500 13px var(--sans);background:var(--card);border:1px solid var(--line2);color:var(--fg);border-radius:99px;padding:5px 12px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+#bell b{background:var(--bad);color:#fff;border-radius:99px;padding:0 7px;font-size:12px;font-weight:600}#bell b:empty{display:none}
+#avisos{position:fixed;top:64px;right:max(16px,calc(50vw - 600px));width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 90px);overflow:auto;z-index:40;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+#avisos h3{font-size:14px;color:var(--muted);font-weight:600;margin-top:4px}
+.av{border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.av.r{border-left-color:var(--bad)}.av.w{border-left-color:var(--series-2)}.av.i{border-left-color:var(--series-1)}
+.av .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}.av .t span:last-child{white-space:nowrap}
+.av .d{font-size:13px;color:var(--muted)}.av .a{display:flex;gap:4px;flex-wrap:wrap}.av .a button{margin:0 8px 0 0}
+.agl td{padding:5px 8px;font-size:13px}
+#avisos .cfgl{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:13px;align-items:center}
+#avisos .cfgl input[type=number]{width:90px;font:400 13px var(--sans);color:var(--fg);background:var(--card);border:1px solid var(--line2);border-radius:6px;padding:4px 6px;text-align:right}
 #ichart{width:100%;height:auto;display:block}
 #ichart text{fill:var(--muted);font:12px var(--sans)}
 #ichart .grid{stroke:var(--line)}
@@ -293,7 +304,8 @@ dialog.nc label.ck input{margin-top:3px}
 </style>
 
 <div class="wrap">
-  <div class="topbar"><span class="brand"><span class="logo">R$</span>Portal de Finanças</span><span class="tag">Protótipo com dados fictícios</span></div>
+  <div class="topbar"><span class="brand"><span class="logo">R$</span>Portal de Finanças</span><span style="display:flex;gap:10px;align-items:center"><button id="bell" aria-haspopup="dialog" aria-expanded="false">Avisos <b id="bellN"></b></button><span class="tag">Protótipo com dados fictícios</span></span></div>
+  <div id="avisos" class="card" hidden role="dialog" aria-label="Avisos"></div>
   <header class="hero">
     <div style="display:flex;flex-direction:column;gap:4px"><span class="sub">Setembro de 2026</span><h1 id="h1t">Fluxo de caixa</h1></div>
     <p class="lede" id="lede">Passado vem dos extratos; futuro vem dos previstos. Ligue ou desligue contas abaixo.</p>
@@ -1288,6 +1300,7 @@ erDiagram
 }
   renderInv();
   window.__invAdd=x=>{INV.push(x);tots();allocAll();renderInv();};
+  window.__inv=INV;
   (window.__persist=window.__persist||{}).lanc={get:()=>({L:all().map(y=>({cat:y.cat,quem:y.quem,byRule:!!y.byRule,owner:!!y.owner,ruleN:y.ruleN||0,prev:y.prev})),G:GASTO,B:BUCKET,INV:INV.filter(x=>x.novo)}),
     set:o=>{if(o.G){for(const k in o.G)GASTO[k]=o.G[k];}if(o.B)Object.assign(BUCKET,o.B);
       const a=all();(o.L||[]).forEach((v,i)=>{if(a[i])Object.assign(a[i],v);});nRec=a.filter(y=>!y.kids&&y.cat!==y.cat0).length;
@@ -1761,14 +1774,94 @@ erDiagram
   all();
 })();
 </script>
-
-
-
-
-
-
-
-
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const nf=(v,d=2)=>new Intl.NumberFormat('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}).format(v);
+  const brl=v=>'R$ '+nf(v), brl0=v=>'R$ '+nf(v,0);
+  const D0=new Date();D0.setHours(0,0,0,0);
+  const days=d=>Math.round((d-D0)/864e5), dm=d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+  const quando=n=>n<0?`venceu há ${-n} dia${n<-1?'s':''}`:n===0?'vence hoje':n===1?'vence amanhã':`vence em ${n} dias`;
+  const CFG={contaDias:5,colchao:3000,paradoDias:7,aplDias:45,agenda:false};
+  let DONE={},SNOOZE={};
+  // contas recorrentes encontradas no histórico (dia do mês); "semPag" = venceu e o pagamento não apareceu no extrato
+  const CONTAS=[
+    {id:'aluguel',n:'Aluguel',dia:5,v:2600,conta:'Itaú'},{id:'cond',n:'Condomínio',dia:10,v:880,conta:'Itaú'},
+    {id:'fatura',n:'Fatura do cartão Itaú',dia:10,v:2987.30,conta:'Itaú'},{id:'luz',n:'Conta de luz',dia:12,v:214.60,conta:'Itaú',semPag:true},
+    {id:'plano',n:'Plano de saúde',dia:15,v:690,conta:'Itaú'},{id:'tel',n:'Telefone e internet',dia:18,v:129.90,conta:'Itaú'},
+    {id:'das',n:'DAS Simples Nacional (PJ)',dia:20,v:1420,conta:'C6 PJ'},{id:'escL',n:'Escola da Lia',dia:25,v:1150,conta:'Itaú'},
+    {id:'escT',n:'Escola do Théo',dia:25,v:890,conta:'Itaú'}];
+  // saldos em conta (fictícios) e desde quando estão acima do colchão
+  const SALDOS=[{c:'C6 · Conta PJ',v:21195.40,desde:new Date(2026,9,2),nota:'entrada do cliente em 02/10'},
+    {c:'Itaú · Conta corrente',v:4320,desde:new Date(2026,9,20),nota:'inclui o resgate de R$ 1.500,00 de 20/09'},
+    {c:'Nubank · Conta digital',v:1250,desde:new Date(2026,9,1),nota:''}];
+  const CDI=.1415;
+  function nextDue(c){let d=new Date(D0.getFullYear(),D0.getMonth(),c.dia);const pago=!c.semPag;
+    if(days(d)<0&&pago)d=new Date(D0.getFullYear(),D0.getMonth()+1,c.dia);return d;}
+  function build(){
+    const urg=[],agenda=[];
+    // 1. contas
+    CONTAS.forEach(c=>{const d=nextDue(c),n=days(d),key='c:'+c.id+':'+d.toISOString().slice(0,7);
+      if(DONE[key])return;agenda.push({d,n,txt:c.n,v:c.v,tipo:'Conta'});
+      if(SNOOZE[key]&&SNOOZE[key]>Date.now())return;
+      if(n<0)urg.push({k:key,s:'r',tipo:'Conta vencida',t:c.n,v:c.v,q:quando(n)+` (${dm(d)})`,d:`Não encontrei o pagamento no extrato da conta ${c.conta}. Se você já pagou, importe o extrato ou marque como paga.`,acts:['paga','depois']});
+      else if(n<=CFG.contaDias)urg.push({k:key,s:n<=1?'r':'w',tipo:'Conta a vencer',t:c.n,v:c.v,q:quando(n)+` (${dm(d)})`,d:`Sai da conta ${c.conta}. Saldo previsto depois do pagamento aparece no fluxo de caixa.`,acts:['paga','depois']});});
+    // contas anuais do Planejamento nos próximos 30 dias
+    try{const pl=window.__persist.plano.get();pl.AN.forEach(a=>{const d=new Date(2026,9+a.m,10),n=days(d);if(n>=0&&n<=30)agenda.push({d,n,txt:a.n+' (anual)',v:a.v,tipo:'Conta'});});}catch(e){}
+    // 2. dinheiro parado
+    SALDOS.forEach(s=>{const ex=s.v-CFG.colchao,dd=days(s.desde)*-1,key='p:'+s.c;
+      if(ex<=0||dd<CFG.paradoDias||DONE[key]||(SNOOZE[key]&&SNOOZE[key]>Date.now()))return;
+      const mes=ex*(Math.pow(1+CDI,1/12)-1);
+      urg.push({k:key,s:'w',tipo:'Dinheiro parado',t:s.c,v:ex,q:`há ${dd} dias`,d:`${brl(s.v)} em conta, ${brl(ex)} acima do colchão de ${brl0(CFG.colchao)}${s.nota?' ('+s.nota+')':''}. Sem render, deixa de ganhar cerca de ${brl(mes)} por mês (a 100% do CDI, antes do IR).`,acts:['proj','depois','ok']});});
+    // 3. aplicações vencendo
+    let PR=[];try{PR=window.__persist.plano.get().PR;}catch(e){}
+    (window.__inv||[]).forEach(x=>{if(!x.venc||x.venc==='–')return;const [dd,mm,yy]=x.venc.split('/').map(Number);const d=new Date(yy,mm-1,dd),n=days(d);if(n<0)return;
+      if(n<=120)agenda.push({d,n,txt:`${x.p} ${x.em} vence`,v:x.vf||x.v,tipo:'Aplicação'});
+      const key='a:'+x.p+x.em+x.venc;if(n>CFG.aplDias||DONE[key]||(SNOOZE[key]&&SNOOZE[key]>Date.now()))return;
+      const pj=PR.find(p=>{const pd=new Date(p.y,p.m-1,1);return pd>=d;});
+      const falta=pj?Math.max(0,pj.it.reduce((a,i)=>a+i[1]*(i[2]==='€'?6.2:i[2]==='US$'?5.5:1),0)*1.1-pj.tem):0;
+      urg.push({k:key,s:n<=15?'w':'i',tipo:'Aplicação vencendo',t:`${x.p} · ${x.em}`,v:x.vf||x.v,q:quando(n)+` (${dm(d)})`,
+        d:`O dinheiro cai na conta da ${x.inst} e, se ficar lá, para de render. ${pj&&falta>0?`O projeto "${pj.n}" ainda precisa de ${brl0(falta)}: este valor cobriria ${falta<= (x.vf||x.v)?'tudo':'parte'}.`:'Decida antes: reaplicar, usar num projeto ou deixar na reserva.'} A calculadora compara taxas para o prazo que você quiser.`,acts:['calc','depois','ok']});});
+    const ord={r:0,w:1,i:2};urg.sort((a,b)=>ord[a.s]-ord[b.s]);agenda.sort((a,b)=>a.d-b.d);return {urg,agenda};}
+  let agMsg='';
+  // a sincronização com o Google Agenda é feita pela tela de entrada (window.__agendaSync); no protótipo ela não existe
+  window.__agendaItems=()=>CFG.agenda?build().agenda.filter(x=>x.n>=0&&x.n<=60):null;
+  window.__agendaMsg=m=>{agMsg=m;const el=$('agSt');if(el)el.textContent=m;};
+  const agSync=()=>{if(window.__agendaSync)window.__agendaSync();else if(CFG.agenda)window.__agendaMsg('No app, ao ligar esta opção o Google pede permissão para criar uma agenda separada chamada "Portal". O app só mexe nela.');else window.__agendaMsg('');};
+  function render(){
+    const {urg,agenda}=build();$('bellN').textContent=urg.length||'';
+    const A={paga:'Marcar como paga',depois:'Lembrar amanhã',ok:'Já resolvi',proj:'Guardar num projeto',calc:'Abrir calculadora'};
+    $('avisos').innerHTML=`<div class="charthead"><h2>Avisos</h2><button class="mini-btn" id="avClose">Fechar</button></div>
+      ${urg.length?urg.map(a=>`<div class="av ${a.s}"><span class="hint">${a.tipo}</span><div class="t"><span>${esc(a.t)}</span><span>${brl(a.v)}</span></div><span class="d"><b>${a.q}</b> · ${a.d}</span>
+        <div class="a">${a.acts.map(x=>`<button class="mini-btn" data-av="${x}" data-k="${esc(a.k)}">${A[x]}</button>`).join('')}</div></div>`).join(''):'<div class="okbox good">Nada precisa da sua atenção agora.</div>'}
+      <h3>Próximos 30 dias</h3>
+      <table class="mini agl"><tbody>${agenda.filter(x=>x.n<=30).map(x=>`<tr><td>${dm(x.d)}</td><td>${esc(x.txt)}</td><td class="hint">${x.tipo}</td><td class="r">${nf(x.v)}</td></tr>`).join('')||'<tr><td class="hint">Nada previsto.</td></tr>'}</tbody></table>
+      <details><summary class="hint" style="cursor:pointer">Configurar avisos</summary><div class="cfgl" style="margin-top:10px">
+        <span>Avisar contas com quantos dias de antecedência</span><input type="number" min="0" max="30" data-cfg="contaDias" value="${CFG.contaDias}">
+        <span>Colchão que pode ficar parado em cada conta (R$)</span><input type="number" min="0" step="500" data-cfg="colchao" value="${CFG.colchao}">
+        <span>Considerar parado depois de quantos dias</span><input type="number" min="1" max="60" data-cfg="paradoDias" value="${CFG.paradoDias}">
+        <span>Avisar vencimento de aplicação com quantos dias</span><input type="number" min="1" max="180" data-cfg="aplDias" value="${CFG.aplDias}">
+        <label class="ck" style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" data-cfg="agenda"${CFG.agenda?' checked':''}> Também criar lembretes no meu Google Agenda, para o celular avisar mesmo com o app fechado. O título é discreto ("Portal: conta a vencer"), sem valores.</label>
+        <span class="hint" id="agSt" style="grid-column:1/-1">${agMsg}</span>
+      </div></details>
+      <p class="hint" style="margin:0">Os avisos são calculados quando você abre o app: contas pelo dia em que costumam vencer no histórico, saldo parado pelos extratos importados e vencimentos pelas aplicações. O app mostra os números e não indica produto.</p>`;}
+  const panel=$('avisos'),bell=$('bell');
+  const open=v=>{panel.hidden=!v;bell.setAttribute('aria-expanded',v);if(v)render();};
+  bell.addEventListener('click',()=>open(panel.hidden));
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)open(false);});
+  document.addEventListener('click',e=>{if(!panel.hidden&&!panel.contains(e.target)&&!bell.contains(e.target))open(false);});
+  panel.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;e.stopPropagation();
+    if(b.id==='avClose')return open(false);const k=b.dataset.k,a=b.dataset.av;if(!a)return;
+    if(a==='paga'||a==='ok')DONE[k]=Date.now();else if(a==='depois')SNOOZE[k]=Date.now()+864e5;
+    else if(a==='proj'){open(false);document.querySelector('[data-tab="plan"]').click();document.querySelector('#p-plan nav.subtabs button:nth-child(2)').click();return;}
+    else if(a==='calc'){open(false);document.querySelector('[data-tab="invest"]').click();document.querySelector('#p-invest nav.subtabs button:nth-child(5)').click();return;}
+    render();agSync();});
+  panel.addEventListener('change',e=>{const t=e.target,c=t.dataset.cfg;if(!c)return;CFG[c]=t.type==='checkbox'?t.checked:(+t.value||0);render();agSync();});
+  (window.__persist=window.__persist||{}).avisos={get:()=>({CFG,DONE,SNOOZE}),set:o=>{if(o.CFG)Object.assign(CFG,o.CFG);if(o.DONE)DONE=o.DONE;if(o.SNOOZE)SNOOZE=o.SNOOZE;render();agSync();}};
+  render();
+})();
+</script>
 <style>
 #gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto}
 #gate .box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:min(440px,100%);display:flex;flex-direction:column;gap:14px}
@@ -1791,6 +1884,7 @@ erDiagram
   // ======= configuração =======
   const CLIENT_ID='COLE_AQUI_O_ID_DO_CLIENTE_GOOGLE';
   const FILE='portal-financas.cofre', ITER=600000, LOCK_MIN=15;
+  const CAL='https://www.googleapis.com/auth/calendar.app.created'; // só a agenda "Portal" criada pelo app; não lê as outras
   // ============================
   const $=id=>document.getElementById(id), wrap=document.querySelector('.wrap'), box=$('gbox');
   const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1820,7 +1914,7 @@ erDiagram
   const ST={
     local:{async find(){const t=localStorage.getItem('portal-cofre');return t?JSON.parse(t):null;},async save(){localStorage.setItem('portal-cofre',JSON.stringify(vault));}},
     drive:{async api(url,opt={},retry=true){opt.headers=Object.assign({Authorization:'Bearer '+token},opt.headers||{});const r=await fetch(url,opt);
-        if(r.status===401&&retry){await getToken('');return ST.drive.api(url,opt,false);}if(!r.ok)throw new Error('Drive '+r.status);return r;},
+        if(r.status===401&&retry){await getToken('');return ST.drive.api(url,opt,false);}if(!r.ok)throw new Error('Google '+r.status);return r;},
       async find(){const q=encodeURIComponent(`name='${FILE}' and trashed=false`);const r=await(await ST.drive.api(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)&orderBy=modifiedTime desc`)).json();
         if(!r.files.length)return null;fileId=r.files[0].id;return (await ST.drive.api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`)).json();},
       async save(){const body=JSON.stringify(vault);
@@ -1830,11 +1924,44 @@ erDiagram
           body:`--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${bd}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${bd}--`})).json();fileId=r.id;}}};
   // ---------- Google ----------
   let tc=null;
-  function getToken(prompt){return new Promise((res,rej)=>{if(!window.google||!google.accounts){rej(new Error('O login do Google não carregou. Verifique a internet e recarregue a página.'));return;}
+  function getToken(prompt,extra){return new Promise((res,rej)=>{if(!window.google||!google.accounts){rej(new Error('O login do Google não carregou. Verifique a internet e recarregue a página.'));return;}
     if(!tc)tc=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:'openid email https://www.googleapis.com/auth/drive.file',callback:()=>{}});
-    tc.callback=r=>{if(r.error){rej(new Error('Login do Google cancelado ou recusado.'));return;}token=r.access_token;res();};
+    tc.callback=r=>{if(r.error){rej(new Error('Login do Google cancelado ou recusado.'));return;}token=r.access_token;calOk=google.accounts.oauth2.hasGrantedAllScopes(r,CAL);res();};
     tc.error_callback=e=>rej(new Error(e.type==='popup_closed'?'A janela do Google foi fechada antes de terminar.':'Não foi possível entrar com o Google.'));
-    tc.requestAccessToken({prompt:prompt??''});});}
+    const o={prompt:prompt??''};if(extra)o.scope='openid email https://www.googleapis.com/auth/drive.file '+extra;tc.requestAccessToken(o);});}
+  // ---------- Google Agenda (lembretes) ----------
+  let calOk=false,calT=null,calBusy=false;
+  const say=m=>window.__agendaMsg&&window.__agendaMsg(m);
+  const sha=async t=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',te.encode(t)))].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,40);
+  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const capi=(path,opt={})=>ST.drive.api('https://www.googleapis.com/calendar/v3/'+path,Object.assign({headers:{'Content-Type':'application/json'}},opt));
+  window.__agendaSync=()=>{const items=window.__agendaItems&&window.__agendaItems();
+    if(!items){say('');return;}
+    if(mode!=='drive'){say('Os lembretes no Google Agenda só funcionam entrando com o Google.');return;}
+    clearTimeout(calT);if(!calOk)calSync();else calT=setTimeout(calSync,1500);};// sem permissão ainda: pede já, no mesmo clique, para o navegador não bloquear a janela do Google
+  async function calSync(){if(calBusy){calT=setTimeout(calSync,3000);return;}calBusy=true;
+    try{const items=window.__agendaItems();if(!items)return;
+      if(!calOk){say('Pedindo permissão ao Google para a agenda "Portal"…');try{await getToken('',CAL);}catch(e){say('Sem permissão para a agenda. Desligue e ligue a opção para tentar de novo.');return;}
+        if(!calOk){say('O Google não deu permissão para a agenda. Desligue e ligue a opção para tentar de novo.');return;}}
+      say('Atualizando lembretes no Google Agenda…');
+      const av=window.__persist.avisos,st=av.get(),cfg=st.CFG;let id=cfg.calId;
+      if(id){try{await capi('calendars/'+encodeURIComponent(id));}catch(e){id=null;}}
+      if(!id){const c=await(await capi('calendars',{method:'POST',body:JSON.stringify({summary:'Portal',description:'Lembretes do Portal de Finanças. Criada e mantida pelo app.',timeZone:'America/Sao_Paulo'})})).json();
+        id=c.id;cfg.calId=id;dirty=true;mark();}
+      const cid=encodeURIComponent(id),want={};
+      for(const x of items){const eid='pf'+await sha(x.tipo+'|'+x.txt+'|'+ymd(x.d)),end=new Date(x.d);end.setDate(end.getDate()+1);
+        const antes=Math.min(28,x.tipo==='Aplicação'?cfg.aplDias:cfg.contaDias),rem=[{method:'popup',minutes:900}];// 9h da véspera
+        if(antes>1)rem.push({method:'popup',minutes:antes*1440-540});// 9h, N dias antes
+        want[eid]={id:eid,summary:x.tipo==='Aplicação'?'Portal: aplicação vence':'Portal: conta a vencer',description:'Abra o Portal de Finanças para ver os detalhes.',
+          start:{date:ymd(x.d)},end:{date:ymd(end)},transparency:'transparent',visibility:'private',reminders:{useDefault:false,overrides:rem}};}
+      const have=await(await capi(`calendars/${cid}/events?maxResults=250&timeMin=${encodeURIComponent(new Date(Date.now()-864e5).toISOString())}`)).json();
+      const old=new Set((have.items||[]).map(e=>e.id));let n=0;
+      for(const e of Object.values(want)){if(old.has(e.id))await capi(`calendars/${cid}/events/${e.id}`,{method:'PUT',body:JSON.stringify(e)});
+        else{try{await capi(`calendars/${cid}/events`,{method:'POST',body:JSON.stringify(e)});}catch(err){await capi(`calendars/${cid}/events/${e.id}`,{method:'PUT',body:JSON.stringify(Object.assign({},e,{status:'confirmed'}))});}}n++;}
+      for(const e of have.items||[])if(!want[e.id])await capi(`calendars/${cid}/events/${e.id}`,{method:'DELETE'});
+      say(`${n} lembrete${n===1?'':'s'} na agenda "Portal" do Google, atualizado${n===1?'':'s'} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}. Paga ou resolvida, a conta sai da agenda.`);
+    }catch(e){say('Não consegui atualizar o Google Agenda agora ('+e.message+'). Tento de novo quando você abrir o app.');}
+    finally{calBusy=false;}}
   // ---------- telas ----------
   function view(h){box.innerHTML=h;const f=box.querySelector('input');f&&f.focus();}
   const head=`<span class="brand"><span class="logo">R$</span>Portal de Finanças</span>`;
@@ -1880,7 +2007,7 @@ erDiagram
       view(`${head}<p class="hint">Abrindo…</p>`);let raw;try{raw=await openVault(k,'rk');}catch(e){return sRk('Chave de recuperação incorreta.');}
       try{await changePw(raw,a);await loadState();await sealState();await ST[mode].save();enter();}catch(e){sRk('Não foi possível salvar: '+e.message);}};}
   // ---------- dentro do app ----------
-  function enter(){$('gate').hidden=true;wrap.hidden=false;lastSave=new Date();bar();watch();}
+  function enter(){$('gate').hidden=true;wrap.hidden=false;lastSave=new Date();bar();watch();window.__agendaSync();}
   function bar(msg){let el=$('cofreBar');if(!el){el=document.createElement('span');el.id='cofreBar';const tb=document.querySelector('.topbar');tb.querySelector('.tag').replaceWith(el);
       el.addEventListener('click',e=>{if(e.target.id==='cLock')lock();});}
     const t=lastSave?lastSave.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
@@ -1897,6 +2024,5 @@ erDiagram
   sStart();
 })();
 </script>
-
 
 </html>
